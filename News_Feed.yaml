@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  AwsNewsFeedRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Description: Allows write access to dynamodb
+      Policies: 
+        - PolicyName: GetRssFeed
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:BatchWriteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:GetItem"
+                Resource: 'arn:aws:dynamodb:us-west-2:<REDACTED>:table/AWS_NEWS_RSS_FEED'
+              - Effect: Allow
+                Action: 
+                  - "dynamodb:ListTables"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                Resource: "arn:aws:logs:us-west-2:<REDACTED>:*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: arn:aws:logs:us-west-2:<REDACTED>:log-group:/aws/lambda/AWS_NEWS_FEED_2:*
+      RoleName: WriteDynamodbTable
+  AwsNewsStreamFeedRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Description: Allows read access to dynamodb stream
+      Policies: 
+        - PolicyName: StreamFeed
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:GetShardIterator"
+                  - "dynamodb:DescribeStream"
+                  - "dynamodb:ListStreams"
+                  - "dynamodb:GetRecords"
+                Resource: "*"
+              - Effect: Allow
+                Action: 
+                  - "sns:*"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                Resource: "arn:aws:logs:us-west-2:<REDACTED>:*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: arn:aws:logs:us-west-2:<REDACTED>:log-group:/aws/lambda/AWS_NEWS_STREAM_FEED:*
+      RoleName: ReadStreamDynamodb
+  NewsFeed:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: Executes RSS Lambda function daily
+      Name: AWS_NEWS_FEED_2
+      ScheduleExpression: "cron(30 9 * * ? *)"
+      State: ENABLED
+      Targets: 
+        - Arn: !GetAtt NewsFeedLambda.Arn
+          Id: 1
+  NewsFeedLambda:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        ImageUri: <REDACTED>.dkr.ecr.us-west-2.amazonaws.com/rss:prod
+      Description: Main AWS_NEWS_FEED Function
+      FunctionName: AWS_NEWS_FEED_2
+      PackageType: Image
+      Role: !GetAtt AwsNewsFeedRole.Arn
+      Timeout: 10
+  LambdaStreamInvoke:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt myDynamoDBTable.StreamArn
+      FunctionName: !Ref NewsFeedStreamLambda
+      StartingPosition: LATEST
+  NewsFeedStreamLambda:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        S3Bucket: aws-news-feed-code
+        S3Key: NEWS_FEED.zip
+      Runtime: python3.9
+      Handler: NEWS_FEED.lambda_handler
+      Description: Sends dynamodb stream event to SNS
+      FunctionName: AWS_NEWS_STREAM_FEED
+      Role: !GetAtt AwsNewsStreamFeedRole.Arn
+      Timeout: 10
+  myDynamoDBTable: 
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions:
+        - 
+          AttributeName: "Date"
+          AttributeType: "S"
+        - 
+          AttributeName: "Title"
+          AttributeType: "S"
+      KeySchema: 
+        - 
+          AttributeName: "Date"
+          KeyType: "HASH"
+        -
+          AttributeName: "Title"
+          KeyType: "RANGE"
+      TableName: "AWS_NEWS_RSS_FEED"
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+  NewsSNS:
+    Type: AWS::SNS::Topic
+    Properties: 
+      DisplayName: AWS_NEWS_FEED_2
+      FifoTopic: false
+      Subscription: 
+        - Endpoint: "<REDACTED>"
+          Protocol: email
+      TopicName: AWS_NEWS_FEED_2
+
+
+
+
+
