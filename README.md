@@ -8,3 +8,6 @@ RSS News Feed for AWS service features and updates
 5. SNS sends out email with service update/announcement
 
 ![newsfeed drawio](https://github.com/charles-large/NewsFeed/assets/70664028/dffd0cc1-20c6-4f88-ba8c-c34d6483e3ce)
+
+![Image from iOS](https://github.com/charles-large/NewsFeed/assets/70664028/d5e1489a-0df6-49d6-9710-e23707a848d6)
+
